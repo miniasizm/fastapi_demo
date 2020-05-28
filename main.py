@@ -3,6 +3,7 @@ from typing import List
 import uvicorn
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
+from starlette.graphql import GraphQLApp
 
 import crud
 import models
@@ -13,6 +14,9 @@ sql_models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
+import graphene
+from graphene_sqlalchemy import SQLAlchemyObjectType
+
 
 def get_db():
     try:
@@ -22,9 +26,31 @@ def get_db():
         db.close()
 
 
+class UserGraph(SQLAlchemyObjectType):
+    class Meta:
+        model = sql_models.User
+        exclude_fields = ('hashed_password',)
+
+
+class Query(graphene.ObjectType):
+    users = graphene.List(UserGraph)
+
+    def resolve_users(self, info):
+        query = UserGraph.get_query(info)
+        return query.all()
+
+
+schema = graphene.Schema(query=Query)
+app.add_route('/graph/', GraphQLApp(schema=schema))
+
 @app.get('/')
 async def root():
     return {'message': 'success'}
+
+
+@app.get('/test/')
+def test(test_var: int):
+    return {'status': 'success'}
 
 
 @app.post('/create-user/', response_model=models.User)
